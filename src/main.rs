@@ -13,6 +13,7 @@ struct State {
     queue: wgpu::Queue,
     surface_config: wgpu::SurfaceConfiguration,
     size: PhysicalSize<u32>,
+    clear_color: wgpu::Color,
 }
 
 impl State {
@@ -67,6 +68,8 @@ impl State {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+        
+        let clear_color = wgpu::Color::BLACK;
 
         Ok(Self {
             surface,
@@ -74,6 +77,7 @@ impl State {
             queue,
             surface_config,
             size,
+            clear_color,
         })
     }
 
@@ -88,7 +92,18 @@ impl State {
 
     #[allow(unused_variables)]
     fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        match event {
+            WindowEvent::CursorMoved {position, ..} => {
+                self.clear_color = wgpu::Color {
+                    r: position.x / self.size.width as f64,
+                    g: position.y / self.size.height as f64,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            },
+            _ => false
+        }
     }
 
     fn update(&mut self) {
@@ -110,12 +125,7 @@ impl State {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(self.clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

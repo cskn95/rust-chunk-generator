@@ -1,5 +1,6 @@
 mod renderer;
 mod vertex;
+mod texture;
 
 use std::error::Error;
 use std::sync::Arc;

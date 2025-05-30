@@ -33,6 +33,7 @@ impl Texture {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
+        
         let texture = device.create_texture(
             &wgpu::TextureDescriptor {
                 label,

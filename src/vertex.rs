@@ -13,18 +13,29 @@ pub const VERTICES: &[Vertex] = &[
     Vertex { position: [0.44147372, 0.2347359, 0.0], tex_coords: [0.9414737, 0.2652641], }, // E
 ];
 
+pub const SQUARE_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.5, 0.5, 0.0], tex_coords: [0.0, 0.0] },
+    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 0.1] },
+    Vertex { position: [0.5, -0.5, 0.0], tex_coords: [1.0, 1.0] },
+    Vertex { position: [0.5, 0.5, 0.0], tex_coords: [1.0, 0.0] },
+];
+
 pub const INDICES: &[u16] = &[
     0, 1, 4,
     1, 2, 4,
     2, 3, 4,
 ];
 
+pub const SQUARE_INDICES: &[u16] = &[
+    0, 1, 2,
+    0, 2, 3,
+];
+
 impl Vertex {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
 
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -33,7 +44,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    offset: size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2,
                 },

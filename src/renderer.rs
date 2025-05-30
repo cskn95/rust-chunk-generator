@@ -15,10 +15,16 @@ pub struct State {
     size: PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    square_vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    square_index_buffer: wgpu::Buffer,
     num_indices: u32,
+    square_num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
+    block_bind_group: wgpu::BindGroup,
     diffuse_texture: Texture,
+    block_texture: Texture,
+    is_square: bool,
 }
 
 impl State {
@@ -74,8 +80,10 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        let diffuse_bytes = include_bytes!("../assets/happy-tree.png"); // CHANGED!
+        let diffuse_bytes = include_bytes!("../assets/happy-tree.png");
+        let block_bytes = include_bytes!("../assets/block.jpg");
         let diffuse_texture = Texture::from_bytes(&device, &queue, diffuse_bytes, "../assets/happy-tree.png").unwrap();
+        let block_texture = Texture::from_bytes(&device, &queue, block_bytes, "../assets/block.jpg").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -104,6 +112,7 @@ impl State {
 
         let diffuse_bind_group = device.create_bind_group(
             &wgpu::BindGroupDescriptor {
+                label: Some("diffuse_bind_group"),
                 layout: &texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -115,7 +124,23 @@ impl State {
                         resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                     }
                 ],
-                label: Some("diffuse_bind_group"),
+            }
+        );
+        
+        let block_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                label: Some("block_bind_group"),
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&block_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&block_texture.sampler),
+                    }
+                ]
             }
         );
 
@@ -176,6 +201,14 @@ impl State {
                 usage: wgpu::BufferUsages::VERTEX,
             }
         );
+        
+        let square_vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Square Vertex Buffer"),
+                contents: bytemuck::cast_slice(SQUARE_VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
 
         let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -184,9 +217,20 @@ impl State {
                 usage: wgpu::BufferUsages::INDEX,
             }
         );
+        
+        let square_index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Square Index Buffer"),
+                contents: bytemuck::cast_slice(SQUARE_INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
 
         let num_indices = INDICES.len() as u32;
+        let square_num_indices = SQUARE_INDICES.len() as u32;
 
+        let is_square = false;
+        
         Ok(Self {
             surface,
             device,
@@ -195,10 +239,16 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
+            square_vertex_buffer,
             index_buffer,
+            square_index_buffer,
             num_indices,
+            square_num_indices,
             diffuse_bind_group,
+            block_bind_group,
             diffuse_texture,
+            block_texture,
+            is_square,
         })
     }
 
@@ -226,7 +276,8 @@ impl State {
                     }
                 ,..
             } => {
-                false
+                self.is_square = !self.is_square;
+                true
             },
             _ => false
         }
@@ -271,10 +322,20 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
+            match self.is_square { 
+                true => {
+                    render_pass.set_bind_group(0, &self.block_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, self.square_vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(self.square_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..self.square_num_indices, 0, 0..1);
+                },
+                false => {
+                    render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+                }
+            }
         }
 
         // submit will accept anything that implements IntoIter

@@ -7,6 +7,7 @@ use winit::window::Window;
 
 use crate::vertex::*;
 use crate::texture::*;
+use crate::camera::Camera;
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -25,6 +26,7 @@ pub struct State {
     diffuse_texture: Texture,
     block_texture: Texture,
     is_square: bool,
+    camera: Camera,
 }
 
 impl State {
@@ -230,6 +232,16 @@ impl State {
         let square_num_indices = SQUARE_INDICES.len() as u32;
 
         let is_square = false;
+
+        let camera = Camera::new(
+            (0.0, 1.0, 2.0).into(),
+            (0.0, 0.0, 0.0).into(),
+            cgmath::Vector3::unit_y(),
+            surface_config.width as f32 / surface_config.height as f32,
+            45.0,
+            0.1,
+            100.0,
+        );
         
         Ok(Self {
             surface,
@@ -249,6 +261,7 @@ impl State {
             diffuse_texture,
             block_texture,
             is_square,
+            camera,
         })
     }
 

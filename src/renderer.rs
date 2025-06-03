@@ -6,8 +6,9 @@ use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::window::Window;
 
 use crate::vertex::*;
-use crate::texture::*;
-use crate::camera::Camera;
+use crate::texture::Texture;
+use crate::camera::{Camera, CameraUniform};
+use crate::camera_controller::CameraController;
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -27,6 +28,10 @@ pub struct State {
     block_texture: Texture,
     is_square: bool,
     camera: Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
+    camera_controller: CameraController,
 }
 
 impl State {
@@ -152,9 +157,60 @@ impl State {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
+        let camera = Camera::new(
+            (0.0, 1.0, 2.0).into(),
+            (0.0, 0.0, 0.0).into(),
+            cgmath::Vector3::unit_y(),
+            surface_config.width as f32 / surface_config.height as f32,
+            45.0,
+            0.1,
+            100.0,
+        );
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&texture_bind_group_layout],
+            bind_group_layouts: &[
+                &texture_bind_group_layout,
+                &camera_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
 
@@ -233,16 +289,8 @@ impl State {
 
         let is_square = false;
 
-        let camera = Camera::new(
-            (0.0, 1.0, 2.0).into(),
-            (0.0, 0.0, 0.0).into(),
-            cgmath::Vector3::unit_y(),
-            surface_config.width as f32 / surface_config.height as f32,
-            45.0,
-            0.1,
-            100.0,
-        );
-        
+        let camera_controller = CameraController::new(0.2);
+
         Ok(Self {
             surface,
             device,
@@ -262,6 +310,10 @@ impl State {
             block_texture,
             is_square,
             camera,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group,
+            camera_controller,
         })
     }
 
@@ -335,6 +387,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             match self.is_square { 
                 true => {
                     render_pass.set_bind_group(0, &self.block_bind_group, &[]);

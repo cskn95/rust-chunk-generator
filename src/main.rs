@@ -2,6 +2,7 @@ mod renderer;
 mod vertex;
 mod texture;
 mod camera;
+mod camera_controller;
 
 use std::error::Error;
 use std::sync::Arc;

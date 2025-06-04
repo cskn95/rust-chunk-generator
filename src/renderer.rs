@@ -333,18 +333,27 @@ impl State {
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Space),
-                        ..
-                    }
-                ,..
+                event: KeyEvent {
+                    physical_key: winit::keyboard::PhysicalKey::Code(keycode),
+                    state,
+                    repeat: false, // Sadece bir kez basıldığında tetikle
+                    .. 
+                },
+                ..
             } => {
-                self.is_square = !self.is_square;
-                true
-            },
-            _ => false
+                // İlk olarak kamera kontrolcüsüne gönder
+                if self.camera_controller.process_events(*keycode, *state) {
+                    return true; // Kamera olayı işlediyse, erken çık
+                }
+                // Kamera işlemediyse, diğer olayları kontrol et
+                if *keycode == winit::keyboard::KeyCode::Space && *state == ElementState::Pressed {
+                    self.is_square = !self.is_square;
+                    log::info!("is_square: {}", self.is_square);
+                    return true; // Boşluk tuşu olayını işledi
+                }
+                false // Diğer tuşlar işlenmedi
+            }
+            _ => false, // Klavye dışı olaylar işlenmedi
         }
     }
 

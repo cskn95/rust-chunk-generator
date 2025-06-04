@@ -42,14 +42,37 @@ impl Camera {
             zfar,
         }
     }
+
+    pub fn eye(&self) -> cgmath::Point3<f32> {
+        self.eye
+    }
+
+    pub fn set_eye(&mut self, eye: cgmath::Point3<f32>) {
+        self.eye = eye;
+    }
+
+    pub fn target(&self) -> cgmath::Point3<f32> {
+        self.target
+    }
+
+    pub fn set_target(&mut self, target: cgmath::Point3<f32>) {
+        self.target = target;
+    }
+
+    pub fn up(&self) -> cgmath::Vector3<f32> {
+        self.up
+    }
+
+    pub fn set_up(&mut self, up: cgmath::Vector3<f32>) {
+        self.up = up;
+    }
+
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
         let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
 
         return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
-    
-    
 }
 
 impl CameraUniform {

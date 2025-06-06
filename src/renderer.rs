@@ -9,6 +9,7 @@ use crate::vertex::*;
 use crate::texture::Texture;
 use crate::camera::{Camera, CameraUniform};
 use crate::camera_controller::CameraController;
+
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -351,6 +352,11 @@ impl State {
                     log::info!("is_square: {}", self.is_square);
                     return true; // Boşluk tuşu olayını işledi
                 }
+                if *keycode == winit::keyboard::KeyCode::KeyR && *state == ElementState::Pressed {
+                    self.camera_controller.toggle_auto_rotate();
+                    log::info!("auto_rotate: {}", self.camera_controller.is_auto_rotating());
+                    return true;
+                }
                 false // Diğer tuşlar işlenmedi
             }
             _ => false, // Klavye dışı olaylar işlenmedi
@@ -360,6 +366,7 @@ impl State {
     pub fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform.update_view_proj(&self.camera);
+
         self.queue.write_buffer(
             &self.camera_buffer,
             0,

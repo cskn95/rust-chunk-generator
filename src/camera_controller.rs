@@ -1,6 +1,6 @@
 use crate::camera::Camera;
-use winit::event::{ WindowEvent, KeyEvent, ElementState };
-use winit::keyboard::{ KeyCode, PhysicalKey };
+use winit::event::{ ElementState };
+use winit::keyboard::{ KeyCode };
 
 pub struct CameraController {
     speed: f32,
@@ -8,6 +8,7 @@ pub struct CameraController {
     is_backward_pressed: bool,
     is_left_pressed: bool,
     is_right_pressed: bool,
+    auto_rotate: bool,
 }
 
 impl CameraController {
@@ -18,11 +19,13 @@ impl CameraController {
             is_backward_pressed: false,
             is_left_pressed: false,
             is_right_pressed: false,
+            auto_rotate: true,
         }
     }
 
     pub fn process_events(&mut self, keycode: KeyCode, state: ElementState) -> bool {
         let is_pressed = state == ElementState::Pressed;
+
         match keycode {
             KeyCode::KeyW | KeyCode::ArrowUp => {
                 self.is_forward_pressed = is_pressed;
@@ -44,7 +47,7 @@ impl CameraController {
         }
     }
 
-    pub fn update_camera(&self, camera: &mut Camera) {
+    pub fn update_camera(&mut self, camera: &mut Camera) {
         use cgmath::InnerSpace;
         let forward = camera.target() - camera.eye();
         let forward_norm = forward.normalize();
@@ -74,5 +77,17 @@ impl CameraController {
         if self.is_left_pressed {
             camera.set_eye(camera.target() - (forward - right * self.speed).normalize() * forward_mag);
         }
+
+        if self.auto_rotate {            
+            camera.set_eye(camera.target() - (forward - right * self.speed).normalize() * forward_mag);
+        }
+    }
+
+    pub fn toggle_auto_rotate(&mut self) {
+        self.auto_rotate = !self.auto_rotate;
+    }
+    
+    pub fn is_auto_rotating(&self) -> bool {
+        self.auto_rotate
     }
 }

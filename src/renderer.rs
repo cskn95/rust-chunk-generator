@@ -2,10 +2,9 @@ use std::error::Error;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event::{ KeyEvent, WindowEvent };
 use winit::window::Window;
 use cgmath::prelude::*;
-
 
 use crate::vertex::*;
 use crate::texture::Texture;
@@ -81,7 +80,6 @@ pub struct State {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
-    block_bind_group: wgpu::BindGroup,
     // diffuse_texture: Texture,
     // block_texture: Texture,
     camera: Camera,
@@ -151,10 +149,7 @@ impl State {
         };
 
         let diffuse_bytes = include_bytes!("../assets/happy-tree.png");
-        let block_bytes = include_bytes!("../assets/block.jpg");
         let diffuse_texture = Texture::from_bytes(&device, &queue, diffuse_bytes, "../assets/happy-tree.png").unwrap();
-        let block_texture = Texture::from_bytes(&device, &queue, block_bytes, "../assets/block.jpg").unwrap();
-
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -196,24 +191,6 @@ impl State {
                 ],
             }
         );
-        
-        let block_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: Some("block_bind_group"),
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&block_texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&block_texture.sampler),
-                    }
-                ]
-            }
-        );
-
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -373,7 +350,6 @@ impl State {
             index_buffer,
             num_indices,
             diffuse_bind_group,
-            block_bind_group,
             // diffuse_texture,
             // block_texture,
             camera,

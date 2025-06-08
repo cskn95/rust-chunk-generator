@@ -55,16 +55,8 @@ impl Camera {
         self.target
     }
 
-    pub fn set_target(&mut self, target: cgmath::Point3<f32>) {
-        self.target = target;
-    }
-
     pub fn up(&self) -> cgmath::Vector3<f32> {
         self.up
-    }
-
-    pub fn set_up(&mut self, up: cgmath::Vector3<f32>) {
-        self.up = up;
     }
 
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {

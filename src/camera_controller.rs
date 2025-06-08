@@ -8,7 +8,6 @@ pub struct CameraController {
     is_backward_pressed: bool,
     is_left_pressed: bool,
     is_right_pressed: bool,
-    auto_rotate: bool,
 }
 
 impl CameraController {
@@ -19,7 +18,6 @@ impl CameraController {
             is_backward_pressed: false,
             is_left_pressed: false,
             is_right_pressed: false,
-            auto_rotate: true,
         }
     }
 
@@ -77,17 +75,5 @@ impl CameraController {
         if self.is_left_pressed {
             camera.set_eye(camera.target() - (forward - right * self.speed).normalize() * forward_mag);
         }
-
-        if self.auto_rotate {            
-            camera.set_eye(camera.target() - (forward - right * self.speed).normalize() * forward_mag);
-        }
-    }
-
-    pub fn toggle_auto_rotate(&mut self) {
-        self.auto_rotate = !self.auto_rotate;
-    }
-    
-    pub fn is_auto_rotating(&self) -> bool {
-        self.auto_rotate
     }
 }

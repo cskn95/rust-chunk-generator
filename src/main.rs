@@ -26,38 +26,34 @@ impl Default for App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            log::info!("winit & wgpu başlatılıyor");
-            let window_attributes = WindowAttributes::default().with_title("winit & wgpu");
+            log::info!("Initializing winit & wgpu");
+            let window_attributes = WindowAttributes::default().with_title("Voxel Engine");
 
             let window = Arc::new(
                 event_loop
                     .create_window(window_attributes)
-                    .expect("Pencere oluşturulamadı"),
+                    .expect("Failed to create window"),
             );
             self.window = Some(window.clone());
 
             match pollster::block_on(State::new(window)) {
                 Ok(state) => {
                     self.state = Some(state);
-                    log::info!("window & state hazır");
+                    log::info!("Voxel engine initialized");
                 }
                 Err(e) => {
-                    log::error!("bir error yaklaşıyor efendim: {}", e);
+                    log::error!("Failed to initialize: {}", e);
                     event_loop.exit();
                 }
             }
-        } else {
-            log::info!("window resume");
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-
         let state = match self.state.as_mut() {
             Some(s) => s,
             None => {
                 if let WindowEvent::CloseRequested = event {
-                    log::warn!("state yok, kapatma isteği");
                     event_loop.exit();
                 }
                 return;
@@ -68,8 +64,13 @@ impl ApplicationHandler for App {
             match event {
                 WindowEvent::CloseRequested
                 | WindowEvent::KeyboardInput {
-                    event: KeyEvent { state: ElementState::Pressed, physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),..},..}
-                => event_loop.exit(),
+                    event: KeyEvent { 
+                        state: ElementState::Pressed, 
+                        physical_key: winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape),
+                        ..
+                    },
+                    ..
+                } => event_loop.exit(),
                 
                 WindowEvent::Resized(physical_size) => state.resize(physical_size),
                 
@@ -85,8 +86,12 @@ impl ApplicationHandler for App {
                         Err(wgpu::SurfaceError::Lost) | Err(wgpu::SurfaceError::Outdated) => {
                             state.resize(state.get_size())
                         },
-                        Err(wgpu::SurfaceError::OutOfMemory) | Err(wgpu::SurfaceError::Other) => {
-                            log::error!("OutOfMemory");
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            log::error!("Out of memory");
+                            event_loop.exit();
+                        },
+                        Err(wgpu::SurfaceError::Other) => {
+                            log::error!("Surface error");
                             event_loop.exit();
                         },
                         Err(wgpu::SurfaceError::Timeout) => {
@@ -94,28 +99,26 @@ impl ApplicationHandler for App {
                         },
                     }
                 }
-                _=> {}
+                _ => {}
             }
         }
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        log::info!("App: Çıkılıyor.");
+        log::info!("Exiting voxel engine");
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    log::info!("Olay döngüsü oluşturuluyor...");
+    log::info!("Starting voxel engine...");
     let event_loop = EventLoop::new().unwrap();
-
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = App::default();
-
     event_loop.run_app(&mut app)?;
 
-    log::info!("Olay döngüsü tamamlandı.");
+    log::info!("Voxel engine shutdown complete");
     Ok(())
 }

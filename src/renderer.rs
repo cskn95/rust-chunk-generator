@@ -27,7 +27,8 @@ pub struct State {
     camera_bind_group: wgpu::BindGroup,
     camera_controller: CameraController,
     depth_texture: Texture,
-    last_render_time: Instant,
+    last_update_time: Instant,  // Renamed for clarity
+    is_active: bool,  // Track if we're actively updating
 }
 
 impl State {
@@ -229,7 +230,8 @@ impl State {
             camera_bind_group,
             camera_controller,
             depth_texture,
-            last_render_time: Instant::now(),
+            last_update_time: Instant::now(),
+            is_active: false,
         })
     }
 
@@ -264,7 +266,15 @@ impl State {
             // Handle keyboard input
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
-                    self.camera_controller.process_events(keycode, key_event.state)
+                    let was_consumed = self.camera_controller.process_events(keycode, key_event.state);
+                    
+                    // If movement started and we weren't active, reset the timer
+                    if was_consumed && !self.is_active {
+                        self.last_update_time = Instant::now();
+                        self.is_active = true;
+                    }
+                    
+                    was_consumed
                 } else {
                     false
                 }
@@ -277,6 +287,11 @@ impl State {
         match event {
             // Handle raw mouse movement for first-person camera look when cursor is grabbed
             DeviceEvent::MouseMotion { delta } => {
+                // Mouse movement should also activate updates
+                if !self.is_active {
+                    self.last_update_time = Instant::now();
+                    self.is_active = true;
+                }
                 self.camera_controller.process_mouse(delta.0, delta.1, &mut self.camera);
             }
             _ => {}
@@ -285,8 +300,16 @@ impl State {
 
     pub fn update(&mut self) {
         let now = Instant::now();
-        let delta_time = now.duration_since(self.last_render_time).as_secs_f32();
-        self.last_render_time = now;
+        
+        // Calculate delta time with a maximum cap to prevent huge jumps
+        let raw_delta = now.duration_since(self.last_update_time).as_secs_f32();
+        let delta_time = raw_delta.min(0.1); // Cap at 100ms (10 FPS minimum)
+        
+        // Only update the timer if we're actively rendering
+        // This prevents delta time accumulation during idle periods
+        if self.is_active || raw_delta < 0.5 {
+            self.last_update_time = now;
+        }
         
         // Apply delta time to camera movement for frame-rate independent movement
         self.camera_controller.update_camera(&mut self.camera, delta_time);
@@ -296,6 +319,9 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+        
+        // Update active state based on whether we have movement
+        self.is_active = self.camera_controller.has_movement();
     }
 
     pub fn should_continue_rendering(&self) -> bool {

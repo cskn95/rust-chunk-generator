@@ -1,8 +1,9 @@
 use std::error::Error;
 use std::sync::Arc;
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
-use winit::event::WindowEvent;
+use winit::event::{DeviceEvent, WindowEvent};
 use winit::window::Window;
 
 use crate::vertex::*;
@@ -26,6 +27,7 @@ pub struct State {
     camera_bind_group: wgpu::BindGroup,
     camera_controller: CameraController,
     depth_texture: Texture,
+    last_render_time: Instant,
 }
 
 impl State {
@@ -75,28 +77,32 @@ impl State {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
+        // Use V-Sync (Fifo mode) to cap FPS to display refresh rate and save power
+        let present_mode = wgpu::PresentMode::Fifo; // Forces V-Sync
+
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 2, // Optimal for V-Sync stability
         };
 
         surface.configure(&device, &surface_config);
 
-        // Camera setup
+        // Camera setup  
         let camera = Camera::new(
-            (0.0, 5.0, 10.0).into(),
-            (0.0, 0.0, 0.0).into(),
-            cgmath::Vector3::unit_y(),
-            surface_config.width as f32 / surface_config.height as f32,
-            45.0,
-            0.1,
-            100.0,
+            (0.0, 5.0, 10.0).into(),        // eye position
+            std::f32::consts::PI,           // yaw: 180° (look towards origin)
+            0.0,                            // pitch: 0° (horizontal)
+            cgmath::Vector3::unit_y(),       // up vector
+            surface_config.width as f32 / surface_config.height as f32,  // aspect ratio
+            45.0,                           // field of view
+            0.1,                            // near plane
+            100.0,                          // far plane
         );
 
         let mut camera_uniform = CameraUniform::new();
@@ -131,7 +137,7 @@ impl State {
             }],
         });
 
-        let camera_controller = CameraController::new(0.1);
+        let camera_controller = CameraController::new(5.0); // Movement speed units per second for delta time
 
         // Shader and pipeline
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -223,6 +229,7 @@ impl State {
             camera_bind_group,
             camera_controller,
             depth_texture,
+            last_render_time: Instant::now(),
         })
     }
 
@@ -237,29 +244,64 @@ impl State {
             self.surface_config.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_config);
             self.depth_texture = Texture::create_depth_texture(&self.device, &self.surface_config, "depth_texture");
+            
+            // Update camera aspect ratio
+            self.camera = Camera::new(
+                self.camera.eye(),
+                self.camera.yaw(),
+                self.camera.pitch(),
+                self.camera.up(),
+                new_size.width as f32 / new_size.height as f32,
+                45.0,
+                0.1,
+                100.0,
+            );
         }
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        if let WindowEvent::KeyboardInput {
-            event: key_event, ..
-        } = event
-        {
-            if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
-                return self.camera_controller.process_events(keycode, key_event.state);
+        match event {
+            // Handle keyboard input
+            WindowEvent::KeyboardInput { event: key_event, .. } => {
+                if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
+                    self.camera_controller.process_events(keycode, key_event.state)
+                } else {
+                    false
+                }
             }
+            _ => false,
         }
-        false
+    }
+
+    pub fn device_input(&mut self, event: &DeviceEvent) {
+        match event {
+            // Handle raw mouse movement for first-person camera look when cursor is grabbed
+            DeviceEvent::MouseMotion { delta } => {
+                self.camera_controller.process_mouse(delta.0, delta.1, &mut self.camera);
+            }
+            _ => {}
+        }
     }
 
     pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
+        let now = Instant::now();
+        let delta_time = now.duration_since(self.last_render_time).as_secs_f32();
+        self.last_render_time = now;
+        
+        // Apply delta time to camera movement for frame-rate independent movement
+        self.camera_controller.update_camera(&mut self.camera, delta_time);
         self.camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+    }
+
+    pub fn should_continue_rendering(&self) -> bool {
+        // Continue rendering if there's camera movement to maintain smooth interaction
+        // V-Sync will cap the frame rate to display refresh rate automatically
+        self.camera_controller.has_movement()
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

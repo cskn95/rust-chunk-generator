@@ -1323,3 +1323,15 @@ Artık kodunuz tamamen Türkçe yorumlarla ve detaylı açıklamalarla donatılm
 
 ---
 
+_**User**_
+
+Değiştirilmiş koda aynı işlemi tekrar uygula.
+
+---
+
+_**Assistant**_
+
+
+
+---
+

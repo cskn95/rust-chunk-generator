@@ -12,6 +12,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 use renderer::State;
 
+/// Ana uygulama yapısı - pencere ve render durumunu saklar
 struct App {
     window: Option<Arc<Window>>,
     state: Option<State>,
@@ -27,64 +28,70 @@ impl Default for App {
 }
 
 impl App {
+    /// İmleci yakalayıp gizler (FPS oyunu benzeri kontrol için)
     fn grab_cursor(&self, window: &Window) {
         use winit::window::CursorGrabMode;
         
-        // Hide cursor
+        // İmleci gizle
         window.set_cursor_visible(false);
         
-        // Try to grab cursor
+        // İmleci yakalamaya çalış (Confined modu ile)
         if let Err(e) = window.set_cursor_grab(CursorGrabMode::Confined) {
-            log::warn!("Failed to grab cursor with Confined mode: {}", e);
-            // Fallback to locked mode
+            log::warn!("İmleç yakalama Confined modu ile başarısız: {}", e);
+            // Başarısızlık durumunda Locked moduna geç
             if let Err(e) = window.set_cursor_grab(CursorGrabMode::Locked) {
-                log::warn!("Failed to grab cursor with Locked mode: {}", e);
+                log::warn!("İmleç yakalama Locked modu ile başarısız: {}", e);
             } else {
-                log::info!("Cursor grabbed with Locked mode");
+                log::info!("İmleç Locked modu ile yakalandı");
             }
         } else {
-            log::info!("Cursor grabbed with Confined mode");
+            log::info!("İmleç Confined modu ile yakalandı");
         }
     }
 }
 
 impl ApplicationHandler for App {
+    /// Uygulama etkinleştirildiğinde çağrılır
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            log::info!("Initializing winit & wgpu");
+            log::info!("Winit ve WGPU başlatılıyor");
             let window_attributes = WindowAttributes::default()
-                .with_title("Voxel Engine")
+                .with_title("Voxel Motoru")
                 .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
 
             let window = Arc::new(
                 event_loop
                     .create_window(window_attributes)
-                    .expect("Failed to create window"),
+                    .expect("Pencere oluşturma başarısız"),
             );
 
+            // İmleci yakalayıp gizle
             self.grab_cursor(&window);
             
             self.window = Some(window.clone());
 
+            // Render durumunu asenkron olarak başlat
             match pollster::block_on(State::new(window.clone())) {
                 Ok(state) => {
                     self.state = Some(state);
-                    // Request initial redraw to start the render loop
+                    // Render döngüsünü başlatmak için ilk çizim isteği
                     window.request_redraw();
-                    log::info!("Voxel engine initialized");
+                    log::info!("Voxel motoru başarıyla başlatıldı");
                 }
                 Err(e) => {
-                    log::error!("Failed to initialize: {}", e);
+                    log::error!("Başlatma başarısız: {}", e);
                     event_loop.exit();
                 }
             }
         }
     }
 
+    /// Pencere olaylarını işler
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         let state = match self.state.as_mut() {
             Some(s) => s,
             None => {
+                // State henüz hazır değilse sadece kapatma olayını dinle
                 if let WindowEvent::CloseRequested = event {
                     event_loop.exit();
                 }
@@ -92,19 +99,22 @@ impl ApplicationHandler for App {
             }
         };
 
+        // Giriş olayını state'e gönder
         let consumed_input = state.input(&event);
         
-        // Request redraw on any input to ensure responsive UI
+        // Herhangi bir giriş olduğunda hızlı tepki için çizim iste
         if consumed_input {
             if let Some(window) = self.window.as_ref() {
                 window.request_redraw();
             }
         }
         
+        // State tarafından işlenmemiş olayları burada ele al
         if !consumed_input {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 
+                // Escape tuşu ile çıkış
                 WindowEvent::KeyboardInput {
                     event: KeyEvent { 
                         state: ElementState::Pressed, 
@@ -114,6 +124,7 @@ impl ApplicationHandler for App {
                     ..
                 } => {event_loop.exit()},
                 
+                // F11 tuşu ile tam ekran geçişi
                 WindowEvent::KeyboardInput {
                     event: KeyEvent { 
                         state: ElementState::Pressed, 
@@ -126,41 +137,49 @@ impl ApplicationHandler for App {
                         let is_fullscreen = window.fullscreen().is_some();
                         if is_fullscreen {
                             window.set_fullscreen(None);
-                            log::info!("Exited fullscreen mode");
+                            log::info!("Tam ekran modundan çıkıldı");
                         } else {
                             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-                            log::info!("Entered fullscreen mode");
+                            log::info!("Tam ekran moduna geçildi");
                         }
                     }
                 },
                 
+                // Pencere boyutu değiştiğinde yeniden boyutlandır
                 WindowEvent::Resized(physical_size) => state.resize(physical_size),
                 
+                // Çizim isteği geldiğinde render et
                 WindowEvent::RedrawRequested => {
+                    // Kamera ve oyun durumunu güncelle
                     state.update();
                     
+                    // Sahneyi render et
                     match state.render() {
                         Ok(_) => {
-                            // Request next frame only if there's movement (power saving with V-Sync)
+                            // Hareket varsa bir sonraki frame'i iste (V-Sync ile güç tasarrufu)
                             if state.should_continue_rendering() {
                                 if let Some(window) = self.window.as_ref() {
                                     window.request_redraw();
                                 }
                             }
                         },
+                        // Surface kayboldu veya güncel değil - yeniden boyutlandır
                         Err(wgpu::SurfaceError::Lost) | Err(wgpu::SurfaceError::Outdated) => {
                             state.resize(state.get_size())
                         },
+                        // Bellek yetersiz - uygulamayı kapat
                         Err(wgpu::SurfaceError::OutOfMemory) => {
-                            log::error!("Out of memory");
+                            log::error!("Bellek yetersiz");
                             event_loop.exit();
                         },
+                        // Diğer surface hataları
                         Err(wgpu::SurfaceError::Other) => {
-                            log::error!("Surface error");
+                            log::error!("Surface hatası");
                             event_loop.exit();
                         },
+                        // Zaman aşımı (genellikle sorun değil)
                         Err(wgpu::SurfaceError::Timeout) => {
-                            log::warn!("Surface timeout")
+                            log::warn!("Surface zaman aşımı")
                         },
                     }
                 }
@@ -169,6 +188,7 @@ impl ApplicationHandler for App {
         }
     }
 
+    /// Cihaz girişlerini işler (fare hareketi gibi)
     fn device_event(
         &mut self,
         _event_loop: &ActiveEventLoop,
@@ -176,9 +196,10 @@ impl ApplicationHandler for App {
         event: DeviceEvent,
     ) {
         if let Some(state) = self.state.as_mut() {
+            // Cihaz girişini state'e gönder
             state.device_input(&event);
             
-            // Request redraw on mouse movement for responsive camera control
+            // Fare hareketi durumunda hızlı kamera kontrolü için çizim iste
             if let DeviceEvent::MouseMotion { .. } = event {
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();
@@ -187,21 +208,23 @@ impl ApplicationHandler for App {
         }
     }
 
+    /// Uygulama kapanırken çağrılır
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        log::info!("Exiting voxel engine");
+        log::info!("Voxel motoru kapatılıyor");
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Loglama sistemini başlat
     env_logger::init();
 
-    log::info!("Starting voxel engine...");
+    log::info!("Voxel motoru başlatılıyor...");
     let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Wait); // Power-saving mode with V-Sync
+    // V-Sync ile güç tasarrufu modu
+    event_loop.set_control_flow(ControlFlow::Wait);
 
     let mut app = App::default();
     event_loop.run_app(&mut app)?;
 
-    log::info!("Voxel engine shutdown complete");
     Ok(())
 }

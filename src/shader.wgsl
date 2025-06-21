@@ -17,6 +17,8 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,  // Ekran koordinatlarındaki pozisyon
     @location(0) color: vec3<f32>,                // Renk bilgisi fragment'a aktarılır
+    @location(1) world_position: vec3<f32>,       // 3D dünya pozisyonu (depth shading için)
+    @location(2) depth: f32,                      // Derinlik bilgisi (fog effect için)
 };
 
 // Vertex shader - her vertex için çağrılır
@@ -32,6 +34,12 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     // Bu sayede her voksel türü farklı renkte görünebilir
     out.color = model.color;
     
+    // Dünya pozisyonunu da aktar (depth-based shading için)
+    out.world_position = model.position;
+    
+    // Derinlik bilgisini hesapla (0.0 = en yakın, 1.0 = en uzak)
+    out.depth = out.clip_position.z / out.clip_position.w;
+    
     return out;
 }
 
@@ -39,7 +47,25 @@ fn vs_main(model: VertexInput) -> VertexOutput {
 // Vertex'lerden interpolate edilmiş renk değerini kullanarak pixel rengini belirler
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Vertex'lerden gelen renk bilgisini kullan
+    // Derinlik bazlı renk modifikasyonu (uzak objeler daha koyu)
+    var depth_factor = 1.0 - (in.depth * 0.1);  // Depth fog effect
+    depth_factor = max(depth_factor, 0.3);       // Minimum görünürlük
+    
+    // Vertex'lerden gelen renk bilgisini depth factor ile çarp
+    var final_color = in.color * depth_factor;
+    
+    // Depth based ambient lighting simulation
+    var ambient_strength = 0.1;
+    var ambient_light = vec3<f32>(0.3, 0.3, 0.4);  // Hafif mavi ambient
+    
+    // Y pozisyonuna göre basit lighting (yüksekte daha aydınlık)
+    var height_factor = (in.world_position.y + 16.0) / 32.0;
+    height_factor = clamp(height_factor, 0.0, 1.0);
+    
+    // Final renk hesaplama
+    final_color = final_color * (ambient_strength + (1.0 - ambient_strength) * height_factor);
+    final_color = final_color + ambient_light * ambient_strength;
+    
     // Alpha değerini 1.0 yaparak opaque (şeffaf olmayan) render
-    return vec4<f32>(in.color, 1.0);
+    return vec4<f32>(final_color, 1.0);
 }

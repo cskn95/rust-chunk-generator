@@ -1,5 +1,6 @@
 use crate::voxel::VoxelType;
 use crate::vertex::Vertex;
+use noise::{NoiseFn, Perlin};
 
 pub const CHUNK_SIZE: usize = 16;
 
@@ -19,16 +20,29 @@ impl Chunk {
         }
     }
 
-    pub fn generate_test_terrain(&mut self) {
+    pub fn generate_terrain(&mut self, noise: &Perlin) {
         for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    if y < CHUNK_SIZE / 4 {
+            for z in 0..CHUNK_SIZE {
+                let world_x = (self.world_pos.0 * CHUNK_SIZE as i32 + x as i32) as f64;
+                let world_z = (self.world_pos.2 * CHUNK_SIZE as i32 + z as i32) as f64;
+
+                // Gürültü fonksiyonunu kullanarak yükseklik haritası oluştur
+                let height_val = noise.get([world_x * 0.01, world_z * 0.01]);
+                
+                // Yüksekliği ölçeklendir ve chunk yüksekliğine ayarla
+                let height = (height_val * 10.0 + 20.0).round() as i32;
+                
+                let chunk_world_y_start = self.world_pos.1 * CHUNK_SIZE as i32;
+
+                for y in 0..CHUNK_SIZE {
+                    let world_y = chunk_world_y_start + y as i32;
+                    
+                    if world_y < height {
                         self.voxels[x][y][z] = VoxelType::Stone;
-                    } else if y < CHUNK_SIZE / 2 {
-                        self.voxels[x][y][z] = VoxelType::Dirt;
-                    } else if y == CHUNK_SIZE / 2 {
+                    } else if world_y == height {
                         self.voxels[x][y][z] = VoxelType::Grass;
+                    } else {
+                        self.voxels[x][y][z] = VoxelType::Air;
                     }
                 }
             }
@@ -41,15 +55,6 @@ impl Chunk {
             Some(self.voxels[x][y][z])
         } else {
             None
-        }
-    }
-
-    pub fn set_voxel(&mut self, x: usize, y: usize, z: usize, voxel_type: VoxelType) {
-        if x < CHUNK_SIZE && y < CHUNK_SIZE && z < CHUNK_SIZE {
-            if self.voxels[x][y][z] != voxel_type {
-                self.voxels[x][y][z] = voxel_type;
-                self.is_dirty = true;
-            }
         }
     }
 
@@ -76,8 +81,9 @@ impl Chunk {
                     
                     let pos = [world_x as f32, world_y as f32, world_z as f32];
 
-                    // Her yüz için komşu kontrolü yap
-                    // +X yüzü (sağ)
+                    // Face culling optimizasyonu - sadece görünen yüzleri render et
+                    
+                    // +X yüzü (sağ) - chunk sınırında veya komşu solid değilse render et
                     if x + 1 >= CHUNK_SIZE || !self.voxels[x + 1][y][z].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -85,7 +91,7 @@ impl Chunk {
                         );
                     }
                     
-                    // -X yüzü (sol)
+                    // -X yüzü (sol) - chunk sınırında veya komşu solid değilse render et
                     if x == 0 || !self.voxels[x - 1][y][z].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -93,7 +99,7 @@ impl Chunk {
                         );
                     }
                     
-                    // +Y yüzü (üst)
+                    // +Y yüzü (üst) - chunk sınırında veya komşu solid değilse render et
                     if y + 1 >= CHUNK_SIZE || !self.voxels[x][y + 1][z].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -101,7 +107,7 @@ impl Chunk {
                         );
                     }
                     
-                    // -Y yüzü (alt)
+                    // -Y yüzü (alt) - chunk sınırında veya komşu solid değilse render et
                     if y == 0 || !self.voxels[x][y - 1][z].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -109,7 +115,7 @@ impl Chunk {
                         );
                     }
                     
-                    // +Z yüzü (ön)
+                    // +Z yüzü (ön) - chunk sınırında veya komşu solid değilse render et
                     if z + 1 >= CHUNK_SIZE || !self.voxels[x][y][z + 1].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -117,7 +123,7 @@ impl Chunk {
                         );
                     }
                     
-                    // -Z yüzü (arka)
+                    // -Z yüzü (arka) - chunk sınırında veya komşu solid değilse render et
                     if z == 0 || !self.voxels[x][y][z - 1].is_solid() {
                         self.add_quad_face(
                             &mut vertices, &mut indices, &mut vertex_count,
@@ -143,43 +149,43 @@ impl Chunk {
     ) {
         const HALF: f32 = 0.5;
         
-        // Her yüz için 4 köşe pozisyonu
+        // Standart cube face vertex tanımları - CCW winding order
         let face_vertices = match face {
-            0 => [ // +X (sağ)
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF],
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF],
+            0 => [ // +X (sağ yüz) 
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 0
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 1
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 2
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 3
             ],
-            1 => [ // -X (sol)
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF],
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF],
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF],
+            1 => [ // -X (sol yüz)
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 0
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 1
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 2
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 3
             ],
-            2 => [ // +Y (üst)
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF],
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF],
+            2 => [ // +Y (üst yüz)
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 0
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 1
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 2
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 3
             ],
-            3 => [ // -Y (alt)
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF],
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF],
+            3 => [ // -Y (alt yüz)
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 0
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 1
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 2
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 3
             ],
-            4 => [ // +Z (ön)
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF],
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF],
+            4 => [ // +Z (ön yüz)
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 0
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 1
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] + HALF], // 2
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] + HALF], // 3
             ],
-            5 => [ // -Z (arka)
-                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF],
-                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF],
-                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF],
-                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF],
+            5 => [ // -Z (arka yüz)
+                [center_pos[0] + HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 0
+                [center_pos[0] + HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 1
+                [center_pos[0] - HALF, center_pos[1] + HALF, center_pos[2] - HALF], // 2
+                [center_pos[0] - HALF, center_pos[1] - HALF, center_pos[2] - HALF], // 3
             ],
             _ => return, // Geçersiz yüz
         };
@@ -192,11 +198,11 @@ impl Chunk {
             });
         }
 
-        // 2 üçgen için index'ler (counter-clockwise)
+        // Quad için triangle indexleri - CCW winding order
         let base = *vertex_count;
         indices.extend_from_slice(&[
-            base, base + 1, base + 2,
-            base + 2, base + 3, base,
+            base, base + 1, base + 2,      // İlk üçgen: 0->1->2
+            base, base + 2, base + 3,      // İkinci üçgen: 0->2->3
         ]);
         
         *vertex_count += 4;

@@ -1,4 +1,5 @@
 use crate::camera::Camera;
+use cgmath::{InnerSpace, Vector3};
 use winit::event::ElementState;
 use winit::keyboard::KeyCode;
 
@@ -98,49 +99,38 @@ impl CameraController {
         let right = camera.right();
         let up = camera.up();
         
-        // Basılı tuşlara göre hız vektörünü hesapla
-        let mut velocity = cgmath::Vector3::new(0.0, 0.0, 0.0);
-        let movement_speed = self.speed * delta_time;
-        
-        // Herhangi bir hareket tuşu basılı mı kontrolü
-        let has_keyboard_input = self.is_forward_pressed || self.is_backward_pressed || 
-                                self.is_left_pressed || self.is_right_pressed ||
-                                self.is_up_pressed || self.is_down_pressed;
+        let mut move_dir = Vector3::new(0.0, 0.0, 0.0);
         
         // İleri/Geri hareket
         if self.is_forward_pressed {
-            velocity += forward * movement_speed;
+            move_dir += forward;
         }
         if self.is_backward_pressed {
-            velocity -= forward * movement_speed;
+            move_dir -= forward;
         }
         
         // Yan hareket (sola/sağa)
         if self.is_right_pressed {
-            velocity += right * movement_speed;
+            move_dir += right;
         }
         if self.is_left_pressed {
-            velocity -= right * movement_speed;
+            move_dir -= right;
         }
-        
+
         // Y ekseni hareketi (yukarı/aşağı)
         if self.is_up_pressed {
-            velocity += up * movement_speed;
+            move_dir += up;
         }
         if self.is_down_pressed {
-            velocity -= up * movement_speed;
+            move_dir -= up;
+        }
+
+        if move_dir.magnitude2() > 0.0 {
+            let new_pos = camera.eye() + move_dir.normalize() * self.speed * delta_time;
+            camera.set_eye(new_pos);
         }
         
         // Güç tasarrufu için hareket durumunu güncelle
-        self.has_movement = has_keyboard_input;
-        
-        // Kamera pozisyonunu güncelle
-        camera.set_eye(camera.eye() + velocity);
-    }
-    
-    /// Hareket olup olmadığını döndürür
-    /// Render döngüsünde güç tasarrufu için kullanılır
-    pub fn has_movement(&self) -> bool {
-        self.has_movement
+        self.has_movement = self.is_forward_pressed || self.is_backward_pressed || self.is_left_pressed || self.is_right_pressed || self.is_up_pressed || self.is_down_pressed;
     }
 }

@@ -13,3 +13,4 @@ bytemuck = { version = "1.23.0", features = ["derive"] }
 image = { version = "0.25.6", default-features = true, features = ["jpeg", "png"] }
 anyhow = "1.0.98"
 cgmath = "0.18.0"
+noise = "0.8.2"
